@@ -1,31 +1,35 @@
-module Future (Future, promise, completed, executeIO, execute, complete, onCompleteIO, await) where
+module Future (Future, promise, completed, executeIO, execute, complete, onCompleteIO, await, bindIO) where
 
 import Control.Concurrent.MVar
 import Control.Concurrent
 
 data FutureState a = Waiting [a -> IO ()] | Done a
 
-newtype Future a = Future (IO (MVar (FutureState a)))
+newtype Future a = Future (MVar (FutureState a))
 
 emptyState = Waiting []
 
-promise :: Future a
-promise = Future (newMVar emptyState)
+promise :: IO (Future a)
+promise = do
+    m <- newMVar emptyState
+    return $ Future m
 
-completed :: a -> Future a
-completed a = Future (newMVar (Done a))
+completed :: a -> IO (Future a)
+completed a = do
+    m <- newMVar $ Done a
+    return $ Future m
 
-executeIO :: IO a -> Future a
-executeIO a = Future $ do
+executeIO :: IO a -> IO (Future a)
+executeIO a = do
     m <- newMVar emptyState
     forkIO (a >>= completeMVar m)
-    return m
+    return $ Future m
 
-execute :: a -> Future a
-execute a = Future $ do
+execute :: a -> IO (Future a)
+execute a = do
     m <- newMVar emptyState
     forkIO (completeMVar m a)
-    return m
+    return $ Future m
 
 completeMVar :: MVar (FutureState a) -> a -> IO ()
 completeMVar m a = do
@@ -42,13 +46,10 @@ completeMVar m a = do
             return ()
 
 complete :: Future a -> a -> IO ()
-complete (Future io) a = do
-    m <- io
-    completeMVar m a
+complete (Future m) = completeMVar m
 
 await :: Future a -> IO a
-await (Future io) = do
-    m <- io
+await (Future m) = do
     state <- takeMVar m
     case state of
         Waiting callbacks -> do
@@ -60,9 +61,22 @@ await (Future io) = do
             putMVar m state
             return a
 
+-- Not useful (yet)
+tryAwait :: Future a -> IO (Maybe a)
+tryAwait (Future m) = do
+    state <- tryTakeMVar m
+    case state of
+        Nothing ->
+            return Nothing
+        Just (Done a) -> do
+            putMVar m (Done a)
+            return $ Just a
+        Just waiting -> do
+            putMVar m waiting
+            return Nothing
+
 onCompleteIO :: (a -> IO ()) -> Future a -> IO ()
-onCompleteIO callback (Future io) = do
-    m <- io
+onCompleteIO callback (Future m) = do
     state <- takeMVar m
     case state of
         Waiting callbacks ->
@@ -71,6 +85,20 @@ onCompleteIO callback (Future io) = do
             putMVar m state
             callback a
 
+bindIO :: (a -> Future b) -> Future a -> IO (Future b)
+bindIO f (Future m) = do
+    state <- takeMVar m
+    case state of
+        Waiting callbacks -> do
+            m' <- newMVar emptyState
+            let callback x = onCompleteIO (completeMVar m') (f x)
+            putMVar m (Waiting (callback : callbacks))
+            return $ Future m'
+        Done a -> do
+            putMVar m state
+            return $ f a
+
+{-
 instance Functor Future where
 
     fmap f (Future io) = Future $ do
@@ -104,3 +132,4 @@ instance Monad Future where
                 result
 
     return = completed
+-}

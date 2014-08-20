@@ -6,12 +6,12 @@ import Control.Monad
 
 main :: IO ()
 main = do
+    foo <- executeIO $ do
+        putStrLn "do the foo"
+        threadDelay 2000000
+        return "foo is slow"
+    bar <- execute "bar is fast"
     onCompleteIO putStrLn foo
     onCompleteIO putStrLn bar
+    foobar <- bindIO (const bar) foo
     void(await foobar)
-    where
-        foo = executeIO $ do
-            threadDelay 2000000
-            return "foo is slow"
-        bar = execute "bar is fast"
-        foobar = foo >> bar
