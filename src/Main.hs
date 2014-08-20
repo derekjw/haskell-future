@@ -8,10 +8,10 @@ main :: IO ()
 main = do
     onCompleteIO putStrLn foo
     onCompleteIO putStrLn bar
-    await foobar
+    void(await foobar)
     where
         foo = executeIO $ do
             threadDelay 2000000
             return "foo is slow"
         bar = execute "bar is fast"
-        foobar = void(foo >> bar)
+        foobar = foo >> bar
