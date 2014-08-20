@@ -1,4 +1,4 @@
-module Future where
+module Future (Future, promise, completed, executeIO, execute, complete, onCompleteIO, await) where
 
 import Control.Concurrent.MVar
 import Control.Concurrent
