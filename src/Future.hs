@@ -31,11 +31,14 @@ completeMVar :: MVar (FutureState a) -> a -> IO ()
 completeMVar m a = do
     state <- takeMVar m
     case state of
+        Waiting [] ->
+            putMVar m (Done a)
         Waiting callbacks -> do
             putMVar m (Done a)
-            sequence_ (fmap (\b -> b a) callbacks)
+            forkIO (sequence_ (fmap (\b -> b a) callbacks))
             return ()
-        Done _ ->
+        Done _ -> do
+            putMVar m state
             return ()
 
 complete :: Future a -> a -> IO ()
@@ -53,7 +56,8 @@ await (Future io) = do
             let f = putMVar m2
             putMVar m (Waiting (f : callbacks))
             takeMVar m2
-        Done a ->
+        Done a -> do
+            putMVar m state
             return a
 
 onCompleteIO :: (a -> IO ()) -> Future a -> IO ()
@@ -63,7 +67,8 @@ onCompleteIO callback (Future io) = do
     case state of
         Waiting callbacks ->
             putMVar m (Waiting (callback : callbacks))
-        Done a ->
+        Done a -> do
+            putMVar m state
             callback a
 
 instance Functor Future where
@@ -74,11 +79,11 @@ instance Functor Future where
         case state of
             Waiting callbacks -> do
                 m' <- newMVar emptyState
-                let f' x = completeMVar m' (f x)
-                putMVar m (Waiting (f' : callbacks))
+                let callback x = completeMVar m' (f x)
+                putMVar m (Waiting (callback : callbacks))
                 return m'
             Done a -> do
-                putMVar m (Done a)
+                putMVar m state
                 newMVar (Done (f a))
 
 
@@ -94,7 +99,7 @@ instance Monad Future where
                 putMVar m (Waiting (callback : callbacks))
                 return m'
             Done a -> do
-                putMVar m (Done a)
+                putMVar m state
                 let Future result = f a
                 result
 
