@@ -13,5 +13,6 @@ main = do
     bar <- execute "bar is fast"
     onCompleteIO putStrLn foo
     onCompleteIO putStrLn bar
-    foobar <- bindIO (const bar) foo
-    void(await foobar)
+    foobar <- foo `zipIO` bar
+    result <- await foobar
+    print result
