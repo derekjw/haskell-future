@@ -1,8 +1,7 @@
 module Main where
 
-import Future
+import Control.Concurrent.Future
 import Control.Concurrent
-import Control.Monad
 
 main :: IO ()
 main = do
@@ -14,5 +13,4 @@ main = do
     onCompleteIO putStrLn foo
     onCompleteIO putStrLn bar
     foobar <- foo `zipIO` bar
-    result <- await foobar
-    print result
+    await foobar >>= print
