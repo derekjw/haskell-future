@@ -65,6 +65,11 @@ await (Future m) = do
             putMVar m state
             return a
 
+await_ :: Future a -> IO ()
+await_ future = do
+    _ <- await future
+    return ()
+
 tryAwait :: Future a -> IO (Maybe a)
 tryAwait (Future m) = do
     state <- readMVar m
