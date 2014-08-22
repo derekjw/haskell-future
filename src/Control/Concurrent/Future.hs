@@ -58,8 +58,8 @@ await (Future m) = do
   case state of
     Waiting callbacks -> do
       m2 <- newEmptyMVar
-      let f = putMVar m2
-      putMVar m (Waiting (f : callbacks))
+      let callback = putMVar m2
+      putMVar m (Waiting (callback : callbacks))
       takeMVar m2
     Done a -> do
       putMVar m state
