@@ -1,5 +1,5 @@
 module Control.Concurrent.Future (Future, promise, completed, executeIO,
-                                  execute, complete, onCompleteIO, await,
+                                  execute, complete, onCompleteIO, await, await_,
                                   tryAwait, isComplete, bindIO, fmapIO, zipIO) where
 
 import Control.Concurrent.MVar
