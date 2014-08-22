@@ -103,9 +103,7 @@ bindIO f (Future m) = do
     case state of
         Waiting callbacks -> do
             m' <- newMVar emptyState
-            let callback x = do
-                  fx <- f x
-                  onCompleteIO (completeMVar m') fx
+            let callback x = f x >>= onCompleteIO (completeMVar m')
             putMVar m (Waiting (callback : callbacks))
             return $ Future m'
         Done a -> do
