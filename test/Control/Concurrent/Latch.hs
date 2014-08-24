@@ -1,6 +1,7 @@
 module Control.Concurrent.Latch where
 
 import Control.Concurrent.MVar
+import Control.Monad
 
 newtype Latch = Latch (MVar ())
 
@@ -10,7 +11,7 @@ newLatch = do
     return $ Latch mvar
 
 tripLatch :: Latch -> IO ()
-tripLatch (Latch mvar) = fmap (const ()) $ tryPutMVar mvar ()
+tripLatch (Latch mvar) = void $ tryPutMVar mvar ()
 
 awaitLatch :: Latch -> IO ()
 awaitLatch (Latch mvar) = readMVar mvar
