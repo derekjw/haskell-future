@@ -4,9 +4,10 @@ module Control.Concurrent.Future (Future, promise, completed, executeIO,
 
 import Control.Concurrent.MVar
 import Control.Concurrent
+import Control.Exception
 import Data.Maybe
 
-data FutureState a = Waiting [a -> IO ()] | Done a
+data FutureState a = Waiting [(Either SomeException a) -> IO ()] | Done (Either SomeException a)
 
 newtype Future a = Future (MVar (FutureState a))
 
@@ -20,22 +21,22 @@ promise = do
 
 completed :: a -> IO (Future a)
 completed a = do
-    m <- newMVar $ Done a
+    m <- newMVar $ Done (Right a)
     return $ Future m
 
 executeIO :: IO a -> IO (Future a)
 executeIO a = do
     m <- newMVar emptyState
-    forkIO (a >>= completeMVar m)
+    forkIO (a >>= completeMVar m . Right)
     return $ Future m
 
 execute :: a -> IO (Future a)
 execute a = do
     m <- newMVar emptyState
-    forkIO (completeMVar m a)
+    forkIO (completeMVar m (Right a))
     return $ Future m
 
-completeMVar :: MVar (FutureState a) -> a -> IO ()
+completeMVar :: MVar (FutureState a) -> (Either SomeException a) -> IO ()
 completeMVar m a = do
     state <- takeMVar m
     case state of
@@ -50,10 +51,24 @@ completeMVar m a = do
             return ()
 
 complete :: Future a -> a -> IO ()
-complete (Future m) = completeMVar m
+complete (Future m) a = completeMVar m (Right a)
 
 await :: Future a -> IO a
 await (Future m) = do
+    state <- takeMVar m
+    case state of
+        Waiting callbacks -> do
+            m2 <- newEmptyMVar
+            let callback = putMVar m2
+            putMVar m (Waiting (callback : callbacks))
+            value <- takeMVar m2
+            either throw return value
+        Done a -> do
+            putMVar m state
+            either throw return a
+
+awaitCatch :: Future a -> IO (Either SomeException a)
+awaitCatch (Future m) = do
     state <- takeMVar m
     case state of
         Waiting callbacks -> do
@@ -75,7 +90,7 @@ tryAwait (Future m) = do
     state <- readMVar m
     case state of
         Done a ->
-            return $ Just a
+            either throw (return . Just) a
         _ ->
             return Nothing
 
@@ -84,7 +99,7 @@ isComplete future = do
     value <- tryAwait future
     return $ isJust value
 
-onCompleteIO :: (a -> IO ()) -> Future a -> IO ()
+onCompleteIO :: (Either SomeException a -> IO ()) -> Future a -> IO ()
 onCompleteIO callback (Future m) = do
     state <- takeMVar m
     case state of
@@ -103,12 +118,18 @@ bindIO f (Future m) = do
     case state of
         Waiting callbacks -> do
             m' <- newMVar emptyState
-            let callback x = f x >>= onCompleteIO (completeMVar m')
+            let callback (Right x) = f x >>= onCompleteIO (completeMVar m')
+                callback (Left x) = completeMVar m' (Left x)
             putMVar m (Waiting (callback : callbacks))
             return $ Future m'
-        Done a -> do
+        Done (Right a) -> do
             putMVar m state
             f a
+        Done (Left a) -> do
+            putMVar m state
+            m' <- newMVar emptyState
+            completeMVar m' (Left a)
+            return $ Future m'
 
 fmapIO :: (a -> b) -> Future a -> IO (Future b)
 fmapIO f (Future m) = do
@@ -116,10 +137,16 @@ fmapIO f (Future m) = do
     case state of
         Waiting callbacks -> do
             m' <- newMVar emptyState
-            let callback x = completeMVar m' (f x)
+            let callback (Right x) = completeMVar m' (Right (f x))
+                callback (Left x) = completeMVar m' (Left x)
             putMVar m (Waiting (callback : callbacks))
             return $ Future m'
-        Done a -> do
+        Done (Right a) -> do
             putMVar m state
-            m' <- newMVar (Done (f a))
+            m' <- newMVar (Done (Right (f a)))
+            return $ Future m'
+        Done (Left a) -> do
+            putMVar m state
+            m' <- newMVar emptyState
+            completeMVar m' (Left a)
             return $ Future m'
