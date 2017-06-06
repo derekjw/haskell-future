@@ -1,0 +1,22 @@
+name: future
+version: '0.1.0.0'
+synopsis: A port of Scala's Future to Haskell
+category: Concurrency
+author: Derek Williams
+maintainer: derek@fyrie.net
+license: BSD3
+homepage: https://github.com/derekjw/haskell-future
+library:
+  source-dirs: src
+  exposed-modules:
+  - Control.Concurrent.Future
+  dependencies:
+  - base >=4.7 && <5
+tests:
+  spec:
+    main: Spec.hs
+    source-dirs: test
+    dependencies:
+    - base
+    - future
+    - hspec
